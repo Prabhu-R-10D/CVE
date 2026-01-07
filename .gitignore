@@ -1,0 +1,27 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+venv/
+env/
+
+# Project State and Logs
+state.json
+*.log
+
+# Temp files
+~$*.xlsx
+
+# Data and Reports
+downloads/
+extracted/
+reports/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
