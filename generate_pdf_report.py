@@ -32,6 +32,25 @@ SUCCESS_COLOR = colors.HexColor("#2f855a")
 LIGHT_BG = colors.HexColor("#f7fafc")
 
 
+def format_analysis_value(val):
+    """Helper to format LLM output (handles strings or dicts)"""
+    if not val:
+        return None
+    
+    val_str = str(val).lower().strip()
+    if val_str == "analysis unavailable" or val_str == "llm analysis failed.":
+        return None
+    
+    if isinstance(val, dict):
+        items = []
+        for k, v in val.items():
+            k_clean = k.replace("_", " ").title()
+            items.append(f"<b>{k_clean}:</b> {v}")
+        return "<br/>".join(items)
+    
+    return str(val)
+
+
 def load_report_data():
     """Load the latest CVE report"""
     reports = sorted(REPORT_DIR.glob("cve_applicability_report_*.json"))
@@ -213,12 +232,14 @@ def create_vulnerability_breakdown(data, styles):
     """Create vulnerability breakdown by component"""
     elements = []
     
+    elements.append(PageBreak())
+    
     section_title = ParagraphStyle(
         'SectionTitle',
         parent=styles['Heading1'],
         fontSize=18,
         textColor=PRIMARY_COLOR,
-        spaceBefore=30,
+        spaceBefore=10,
         spaceAfter=15
     )
     elements.append(Paragraph("VULNERABILITY BREAKDOWN BY COMPONENT", section_title))
@@ -264,7 +285,7 @@ def create_vulnerability_breakdown(data, styles):
                 v.get('CVE State', 'N/A')
             ])
         
-        cve_table = Table(cve_data, colWidths=[2*inch, 1.5*inch, 1.5*inch])
+        cve_table = Table(cve_data, colWidths=[1.5*inch, 1.5*inch, 2*inch])
         cve_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), ACCENT_COLOR),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
@@ -282,6 +303,67 @@ def create_vulnerability_breakdown(data, styles):
         ]))
         elements.append(cve_table)
         elements.append(Spacer(1, 15))
+
+        # Expert Analysis Section
+        analysis_shown = False
+        for v in vulns:
+            # Check if we have any valid analysis data
+            issue_desc = format_analysis_value(v.get('Issue Description'))
+            if not issue_desc:
+                continue
+
+            if not analysis_shown:
+                analysis_shown = True
+
+            analysis_header_style = ParagraphStyle(
+                'AnalysisHeader',
+                parent=styles['Normal'],
+                fontSize=10,
+                textColor=ACCENT_COLOR,
+                fontName='Helvetica-Bold',
+                spaceBefore=10,
+                spaceAfter=15
+            )
+            elements.append(Paragraph(f"Analysis for {v['CVE ID']}:", analysis_header_style))
+            
+            analysis_body_style = ParagraphStyle(
+                'AnalysisBody',
+                parent=styles['Normal'],
+                fontSize=10,
+                leading=14,
+                spaceBefore=0,
+                spaceAfter=25,
+                leftIndent=15,
+                rightIndent=15,
+                borderPadding=12,
+                backColor=colors.Whiter(LIGHT_BG, 0.4),
+                borderRadius=8,
+                borderWidth=0
+            )
+
+            severity = str(v.get("Risk Severity", "Unknown")).title()
+            severity_color = {
+                "Critical": DANGER_COLOR,
+                "High": DANGER_COLOR,
+                "Medium": WARNING_COLOR,
+                "Low": SUCCESS_COLOR
+            }.get(severity, PRIMARY_COLOR)
+
+            exposure = format_analysis_value(v.get('Exposure Classification')) or 'N/A'
+            timeline = format_analysis_value(v.get('Required Timeline')) or 'N/A'
+            impact = format_analysis_value(v.get('Impact')) or 'N/A'
+            recommendation = format_analysis_value(v.get('Fix Recommendation')) or 'N/A'
+
+            analysis_content = f"""
+            <b>Issue Description:</b> {issue_desc}<br/>
+            <b>Exposure:</b> {exposure} | 
+            <b>Risk Severity:</b> <font color='{severity_color.hexval()}'><b>{severity}</b></font> | 
+            <b>Timeline:</b> {timeline}<br/><br/>
+            <b>Impact Analysis:</b><br/>{impact}<br/><br/>
+            <b>Fix Recommendation:</b><br/>{recommendation}
+            """
+            elements.append(Paragraph(analysis_content, analysis_body_style))
+            elements.append(Spacer(1, 5))
     
     return elements
 

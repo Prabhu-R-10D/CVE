@@ -7,11 +7,12 @@ A continuous vulnerability scanner that monitors the official CVE Project databa
 This application (`app.py`) continuously polls the [CVE Project cvelistV5](https://github.com/CVEProject/cvelistV5) GitHub repository for new delta CVE updates. When new vulnerabilities are detected, it:
 
 1. Downloads and extracts the latest CVE delta files.
-2. Processes CVE data against your software inventory (`inventory.xlsx`).
-3. Performs intelligent component name matching and version range analysis.
-4. Generates a **PDF Report** with professional styling, company logo, and executive summary.
-5. Sends an official vulnerability advisory email with the PDF report attached.
-6. Maintains processing state to ensure only new vulnerabilities are reported.
+2. Processes CVE data against the software inventory (`inventory.xlsx`).
+3. Performs component name matching and version range analysis.
+4. **Generates security analysis** using an LLM for deep vulnerability insights.
+5. Generates a **PDF Report** with professional styling, and executive summary.
+6. Sends an official vulnerability advisory email with the PDF report attached.
+7. Maintains processing state to ensure only new vulnerabilities are reported.
 
 ## Setup
 
@@ -63,6 +64,8 @@ The application requires several environment variables to be set in your `.env` 
 | `SMTP_USERNAME` | SMTP username/email. | *(None)* |
 | `SMTP_PASSWORD` | SMTP password or app-specific password. | *(None)* |
 | `ALERT_EMAIL_TO` | The recipient email address for vulnerability alerts. | *(None)* |
+| `LLM_URL` | The endpoint URL for the LLM API (e.g., Ollama). | *(None)* |
+| `LLM_MODEL` | The specific LLM model to use for analysis. |  *(None)*  |
 
 ### Example `.env` file structure:
 ```env
@@ -74,6 +77,8 @@ SMTP_PASSWORD=your-app-password
 ALERT_EMAIL_TO=recipient@example.com
 POLL_INTERVAL_SECONDS=60
 GITHUB_API_URL=https://api.github.com/repos/CVEProject/cvelistV5/releases
+LLM_URL=http://llm-url
+LLM_MODEL=example-llm-model
 ```
 
 ## Output
@@ -92,12 +97,6 @@ The `state.json` file tracks:
 - `last_delta`: The last processed ZIP filename.
 - `last_run`: Timestamp of the last successful scan.
 - `reported_findings`: List of CVE/Component keys already reported to avoid duplication.
-
-## Branding
-
-The PDF report can be branded with your company logo.
-- Place your logo at `assets/logo.png`.
-- The scanner will automatically include it on the cover page and in the page headers.
 
 ## Maintenance
 

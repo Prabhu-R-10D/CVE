@@ -19,6 +19,9 @@ load_dotenv()
 
 GITHUB_API_URL = os.getenv("GITHUB_API_URL")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+LLM_URL = os.getenv("LLM_URL")
+LLM_MODEL = os.getenv("LLM_MODEL")
+
 
 BASE_DIR = Path(__file__).parent
 DOWNLOAD_DIR = BASE_DIR / "downloads"
@@ -308,6 +311,74 @@ def is_version_affected(installed, affected_entry):
         return False
 
 
+def generate_llm_analysis(cve_id, description, component, version):
+    """
+    Generate expert security analysis.
+    """
+    logger.info(f"Generating LLM analysis for {cve_id}...")
+    
+    prompt = f"""
+    As a senior cybersecurity expert, analyze the following vulnerability:
+    
+    CVE ID: {cve_id}
+    Affected Component: {component}
+    Installed Version: {version}
+    Description: {description}
+    
+    Provide a professional security report in JSON format with the following keys. 
+    IMPORTANT: All values MUST be string text, NOT nested objects or lists.
+    
+    1. "Issue Description": A concise technical summary (2-3 sentences).
+    2. "Exposure Classification": One of [External, Internal].
+    3. "Risk Severity": One of [Critical, High, Medium, Low].
+    4. "Impact": A consolidated string describing business and technical impact.
+    5. "Fix Recommendation": A consolidated string describing remediation steps.
+    6. "Required Timeline": Recommended mitigation timeframe. 
+       - Use "Immediate" for Critical risks or High risks with internet exposure.
+       - Use "7 days" for High risks.
+       - Use "30 days" for Medium and Low risks.
+
+    Return ONLY the raw JSON object. Do not include markdown code blocks or additional text.
+    """
+    
+    payload = {
+        "model": LLM_MODEL,
+        "prompt": prompt,
+        "stream": False,
+        "format": "json"
+    }
+    
+    try:
+        response = requests.post(LLM_URL, json=payload, timeout=60)
+        response.raise_for_status()
+        result = response.json()
+        
+        analysis_text = result.get("response", "{}")
+        analysis = json.loads(analysis_text)
+        
+        required_fields = [
+            "Issue Description", "Exposure Classification", "Risk Severity", 
+            "Impact", "Fix Recommendation", "Required Timeline"
+        ]
+        
+        for field in required_fields:
+            if field not in analysis:
+                analysis[field] = "Analysis unavailable"
+                
+        return analysis
+        
+    except Exception as e:
+        logger.error(f"LLM analysis failed for {cve_id}: {e}")
+        return {
+            "Issue Description": "LLM analysis failed.",
+            "Exposure Classification": "Unknown",
+            "Risk Severity": "Unknown",
+            "Impact": "Unknown",
+            "Fix Recommendation": "Manual review required.",
+            "Required Timeline": "Manual review required."
+        }
+
+
 def normalize_component_name(name):
     """Normalize component name for matching"""
     if not name:
@@ -461,6 +532,8 @@ def match_cves_to_inventory(inventory):
             
             containers = cve.get("containers", {})
             cna = containers.get("cna", {})
+            descriptions = cna.get("descriptions", [])
+            full_description = descriptions[0].get("value", "No description available.") if descriptions else "No description available."
             affected_list = cna.get("affected", [])
 
             if not affected_list:
@@ -565,7 +638,19 @@ def match_cves_to_inventory(inventory):
                                 "Business Impact": app["Business Impact"],
                                 "CVE State": meta.get("state", "UNKNOWN"),
                                 "Published Date": meta.get("datePublished", ""),
+                                "Description": full_description,
                             })
+                            
+                            # Add LLM Analysis
+                            logger.info(f"Adding LLM analysis for {findings[-1]['CVE ID']}")
+                            analysis = generate_llm_analysis(
+                                findings[-1]["CVE ID"],
+                                full_description,
+                                findings[-1]["Component"],
+                                findings[-1]["Installed Version"]
+                            )
+                            findings[-1].update(analysis)
+                            
                             break
                         else:
                             match_attempt["reason"] = "version_out_of_range"
